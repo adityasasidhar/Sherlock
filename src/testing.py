@@ -34,7 +34,7 @@ def extract_text_from_html(html):
 def is_url(text):
     return bool(re.match(r"^(https?|ftp)://[^\s/$.?#].\S*$", text, re.IGNORECASE))
 
-API_KEY = os.getenv("AIzaSyDiPtHQS0ePMsasBjk1tYOClpdxw7cJ9Yo", "").strip()
+API_KEY = os.getenv("", "").strip()
 
 def check_url(url):
     suspicious_patterns = re.compile("|".join([
