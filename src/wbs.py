@@ -1,6 +1,18 @@
 import re
 import requests
 from bs4 import BeautifulSoup
+from newspaper import Article
+
+def get_clean_article_text(url):
+    try:
+        article = Article(url)
+        article.download()
+        article.parse()
+        return article.text.strip() if article.text else "No text found."
+    except Exception as e:
+        print(f"Error extracting article: {e}")
+        return "Failed to fetch article text."
+
 
 def is_url(text):
     url_pattern = re.compile(
@@ -37,7 +49,6 @@ def check_url(url):
             "threatEntries": [{"url": url}],
         },
     }
-
     try:
         response = requests.post(api_url, json=data)
         if response.status_code == 200 and response.json() != {}:
@@ -46,6 +57,7 @@ def check_url(url):
         print(f"Error: {e}")
         return "error"
 
+    print("URL is safe")
     return "safe"
 
 def fetch_webpage(url, timeout=10):
@@ -62,34 +74,31 @@ def fetch_webpage(url, timeout=10):
 
 def extract_text_from_html(html):
     soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "iframe", "img", "video", "audio", "svg"]):
+
+    # Remove unnecessary elements
+    for tag in soup(["script", "style", "iframe", "img", "video", "audio", "svg", "noscript", "aside", "footer"]):
         tag.decompose()
-    article = soup.find("article")
-    if article:
-        paragraphs = article.find_all("p")
-        headers = article.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
-        lists = article.find_all(["ul", "li"])
-    else:
-        # Fallback: Extract text from the entire page
-        paragraphs = soup.find_all("p")
-        headers = soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
-        lists = soup.find_all(["ul", "li"])
+
+    # Try finding an article or main content div
+    main_content = soup.find("article") or soup.find("main") or soup.find("div", class_="content")
+
+    # Extract text from the best found content
+    elements = main_content.find_all(["p", "h1", "h2", "h3", "li", "blockquote"]) if main_content else soup.find_all(["p", "h1", "h2", "h3", "li", "blockquote"])
+
     content = []
-
-    for header in headers:
-        content.append(f"\n{header.get_text(strip=True)}\n")  # Keep heading structure
-
-    for para in paragraphs:
-        text = para.get_text(strip=True)
+    for elem in elements:
+        text = elem.get_text(strip=True)
         if text:
-            content.append(text)
-
-    for lst in lists:
-        for li in lst.find_all("li"):
-            content.append(f"• {li.get_text(strip=True)}")  # Format list items
-
+            if elem.name in ["h1", "h2", "h3"]:
+                content.append(f"\n{text}\n")  # Keep headers structured
+            elif elem.name == "li":
+                content.append(f"• {text}")  # Format list items
+            else:
+                content.append(text)
     clean_text = "\n".join(content)
     return clean_text if clean_text else "No text content found."
+
+
 
 def get_clean_article_text(url):
     html = fetch_webpage(url)
