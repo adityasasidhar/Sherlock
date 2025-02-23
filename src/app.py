@@ -1,7 +1,54 @@
+import re
 import torch
 import requests
 from bs4 import BeautifulSoup
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+def is_url(text):
+    url_pattern = re.compile(
+        r"^(https?|ftp)://[^\s/$.?#].\S*$", re.IGNORECASE
+    )
+    return bool(url_pattern.match(text))
+
+with open('../apikey.txt', 'r') as f:
+    key = f.read()
+
+def check_url(url):
+    print("Checking URL safety...")
+    API_KEY = key
+    suspicious_patterns = [
+        r"[a-zA-Z0-9-]+\.(xyz|top|click|info|biz|gq|cf|tk|ml|ga|men|work|trade|loan)$",
+        r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",
+        r"(free|cheap|offer|win|bonus|prize|gift|reward|lottery|promo|hotdeal|discount|earnmoney|paynow|"
+        r"fastcash|creditcard|bitcoin|forex|hack|unblock|download|crack|keygen|serial|giveaway|payperclick)\.",
+    ]
+
+    if any(re.search(pattern, url) for pattern in suspicious_patterns):
+        return "unsafe (offline heuristic check)"
+
+    # Step 2: Google Safe Browsing API check (More accurate but requires an API key)
+    api_url = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={API_KEY}"
+    data = {
+        "client": {"clientId": "your_app", "clientVersion": "1.0"},
+        "threatInfo": {
+            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
+            "platformTypes": ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries": [{"url": url}],
+        },
+    }
+
+    try:
+        response = requests.post(api_url, json=data)
+        if response.status_code == 200 and response.json() != {}:
+            return "unsafe (Google Safe Browsing)"
+    except requests.exceptions.RequestException as e:
+        print(f"Error: {e}")
+        return "error"
+
+    return "safe"
 
 """
 1) The first thing that this code does is load the model and tokenizer from the Hugging Face model hub.
@@ -12,14 +59,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
    
 3) The get_clean_article_text function combines the two functions above to fetch and extract the text content from a webpage.
 
-4) Then it writes it onto the conetxt file
+4) Then it writes it onto the context file
 
-5) The code then reads the context from a file called history.txt
+5) The code then reads the context from a file called content.txt
 
 """
 torch.backends.cuda.matmul.allow_tf32 = True
 model_name = "meta-llama/Llama-3.2-3B-Instruct"
-
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_compute_dtype=torch.bfloat16,
@@ -31,8 +77,7 @@ tokenizer.pad_token = tokenizer.eos_token
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     quantization_config=bnb_config,
-    device_map="cuda",
-    use_cache = True
+    device_map="cuda"
 )
 
 def fetch_webpage(url, timeout=10):
@@ -49,23 +94,34 @@ def fetch_webpage(url, timeout=10):
 
 def extract_text_from_html(html):
     soup = BeautifulSoup(html, "html.parser")
-
-    # Try extracting from <article> tags first
+    for tag in soup(["script", "style", "iframe", "img", "video", "audio", "svg"]):
+        tag.decompose()
     article = soup.find("article")
     if article:
         paragraphs = article.find_all("p")
+        headers = article.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
+        lists = article.find_all(["ul", "li"])
     else:
-        # Fallback: Extract all <p> tags
+        # Fallback: Extract text from the entire page
         paragraphs = soup.find_all("p")
+        headers = soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
+        lists = soup.find_all(["ul", "li"])
+    content = []
 
-    # Extract and clean text
-    article_text = "\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+    for header in headers:
+        content.append(f"\n{header.get_text(strip=True)}\n")  # Keep heading structure
 
-    # If no article content is found, return full webpage text as a last resort
-    if not article_text:
-        article_text = soup.get_text( separator="\n", strip=True)
+    for para in paragraphs:
+        text = para.get_text(strip=True)
+        if text:
+            content.append(text)
 
-    return article_text if article_text else "No article content found."
+    for lst in lists:
+        for li in lst.find_all("li"):
+            content.append(f"• {li.get_text(strip=True)}")  # Format list items
+
+    clean_text = "\n".join(content)
+    return clean_text if clean_text else "No text content found."
 
 def get_clean_article_text(url):
     html = fetch_webpage(url)
@@ -73,11 +129,8 @@ def get_clean_article_text(url):
         return extract_text_from_html(html)
     return "Failed to fetch article text."
 
-with open('../history.txt', 'r') as f:
-    contxt = f.read()
-
 def estimate_confidence(inputs):
-    with torch.inference_mode():
+    with torch.no_grad():  # Instead of inference_mode()
         outputs = model(**inputs)
     logits = outputs.logits
     last_token_logits = logits[0, -1, :]
@@ -88,26 +141,59 @@ def estimate_confidence(inputs):
     return {"max_probability": max_prob, "entropy": entropy}
 
 print("Model loaded successfully")
-query = input("prompt: ")
+while True:
+    query = input("You: ")
+    if query.lower() == "exit":
+        with open('../context.txt', 'w'):
+            f.write(" ")
+        print("Goodbye!")
+        break
+    if is_url(query) == True:
+        if check_url(query) == "safe":
+            print("URL is safe")
+            context = get_clean_article_text(query)
+            context = context[:1000]
+            with open('../context.txt', 'w') as f:
+                context = f.write(context)
+                print("Context updated successfully")
+            inputs = tokenizer(context,query, return_tensors="pt", padding=True, truncation=True, max_length=3500).to("cuda")
+            print(estimate_confidence(inputs))
+            output = model.generate(
+                **inputs,
+                max_length=3500,
+                num_return_sequences=1,
+                do_sample=False,
+                temperature=0.7,
+                top_p=0.9,
+                eos_token_id=tokenizer.eos_token_id
+            )
+            response = tokenizer.batch_decode(output, skip_special_tokens=True)
+            response = response[0]
+            response = response.replace(query, "").strip()
+            response = response.replace(context,"").strip()
+            tokens = tokenizer(response, return_tensors="pt").input_ids.shape[1]
+            print(f"Number of tokens in response: {tokens}")
+            print(f"Assistant: {response}")
+        else:
+            continue
 
-inputs = tokenizer(contxt,query, return_tensors="pt", padding=True, truncation=True,max_length=2200).to("cuda")
-print(estimate_confidence(inputs))
-output = model.generate(
-    **inputs,
-    max_length = 3000,
-    num_return_sequences=1,
-    do_sample=False,
-    temperature=0.8,
-    top_p=0.9,
-    eos_token_id=tokenizer.eos_token_id
-)
-response = tokenizer.batch_decode(output, skip_special_tokens=True)
-response = response[0]
-response = response[len(query):].strip()
+    else:
+        inputs = tokenizer(query, return_tensors="pt", padding=True, truncation=True, max_length=3800).to("cuda")
+        print(estimate_confidence(inputs))
+        output = model.generate(
+            **inputs,
+            max_length=3800,
+            num_return_sequences=1,
+            do_sample=False,
+            temperature=0.9,
+            top_p=0.9,
+            eos_token_id=tokenizer.eos_token_id
+        )
+        response = tokenizer.batch_decode(output, skip_special_tokens=True)
+        response = response[0]
+        response = response[len(query):].strip()
+        response = response.replace(query, "").strip()
+        tokens = tokenizer(response, return_tensors="pt").input_ids.shape[1]
+        print(f"Number of tokens in response: {tokens}")
+        print(f"Assistant: {response}")
 
-
-tokens = tokenizer(response, return_tensors="pt").input_ids.shape[1]
-print(f"Number of tokens in response: {tokens}")
-print(response)
-torch.cuda.empty_cache()
-f.close()
