@@ -98,8 +98,6 @@ def extract_text_from_html(html):
     clean_text = "\n".join(content)
     return clean_text if clean_text else "No text content found."
 
-
-
 def get_clean_article_text(url):
     html = fetch_webpage(url)
     if html:

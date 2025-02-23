@@ -52,7 +52,7 @@ print("Model loaded successfully")
 while True:
     query = input("You: ")
     if query.lower() == "exit":
-        with open('../context.txt', 'w'):
+        with open('context.txt', 'w'):
             f.write(" ")
         print("Goodbye!")
         break
@@ -60,14 +60,13 @@ while True:
         if check_url(query) == "safe":
             print("URL is safe")
             context = get_clean_article_text(query)
-            context = context[:1000]
-
-            with open('../context.txt', 'w') as f:
+            context = context[:2000]
+            with open('context.txt', 'w') as f:
                 context = f.write(context)
-
             print("Context updated successfully")
-
             if isinstance(context, str) and isinstance(query, str):
+                with open('context.txt', 'r') as f:
+                    context = f.read()
                 inputs = tokenizer(context, query, return_tensors="pt", padding=True, truncation=True,
                                   max_length=3000).to("cuda")
                 output = model.generate(
@@ -86,14 +85,11 @@ while True:
                 tokens = tokenizer(response, return_tensors="pt").input_ids.shape[1]
                 print(f"Number of tokens in response: {tokens}")
                 print(f"Assistant: {response}")
-
-            else:
-                print("Error: Context or query is not a valid string.")
         else:
             continue
-
     else:
-        inputs = tokenizer(query, return_tensors="pt", padding=True, truncation=True, max_length=3800).to("cuda")
+        context=""
+        inputs = tokenizer(context,query, return_tensors="pt", padding=True, truncation=True, max_length=3800).to("cuda")
         print(estimate_confidence(inputs))
         output = model.generate(
             **inputs,
@@ -111,4 +107,5 @@ while True:
         tokens = tokenizer(response, return_tensors="pt").input_ids.shape[1]
         print(f"Number of tokens in response: {tokens}")
         print(f"Assistant: {response}")
+        context+=response
 
