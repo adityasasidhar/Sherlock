@@ -3,13 +3,12 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from wbs import is_url, check_url, get_clean_article_text
 
-def estimate_confidence(inputs):
+def estimate_confidence(query):
     with torch.no_grad():
-        outputs = model(**inputs)
+        outputs = model(**query)
     logits = outputs.logits
     last_token_logits = logits[0, -1, :]
     probabilities = torch.nn.functional.softmax(last_token_logits, dim=-1)
-
     max_prob = torch.max(probabilities).item()
     entropy = -torch.sum(probabilities * torch.log(probabilities)).item()
     return {"max_probability": max_prob, "entropy": entropy}
@@ -31,7 +30,6 @@ def estimate_confidence(inputs):
 model_name = "meta-llama/Llama-3.2-3B-Instruct"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
 torch.backends.cuda.matmul.allow_tf32 = True
 
 bnb_config = BitsAndBytesConfig(
@@ -39,7 +37,6 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4",
 )
-
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 tokenizer.pad_token = tokenizer.eos_token
 
@@ -47,28 +44,28 @@ model = AutoModelForCausalLM.from_pretrained(
     model_name,
     quantization_config=bnb_config,
     device_map="cuda")
+print("model loaded")
 
-print("Model loaded successfully")
 while True:
     query = input("You: ")
     if query.lower() == "exit":
-        with open('context.txt', 'w'):
-            f.write(" ")
-        print("Goodbye!")
         break
-    if is_url(query) == True:
+    if is_url(query):
         if check_url(query) == "safe":
             print("URL is safe")
             context = get_clean_article_text(query)
-            context = context[:2000]
+            context = context[:2500]
             with open('context.txt', 'w') as f:
                 context = f.write(context)
             print("Context updated successfully")
             if isinstance(context, str) and isinstance(query, str):
                 with open('context.txt', 'r') as f:
                     context = f.read()
-                inputs = tokenizer(context, query, return_tensors="pt", padding=True, truncation=True,
-                                  max_length=3000).to("cuda")
+                inputs = tokenizer(context, query,
+                                   return_tensors="pt",
+                                   padding=True,
+                                   truncation=True,
+                                   max_length=3000).to("cuda")
                 output = model.generate(
                     **inputs,
                     max_length=3000,
@@ -80,7 +77,7 @@ while True:
                 )
                 response = tokenizer.batch_decode(output, skip_special_tokens=True)
                 response = response[0]
-                response = response.replace(query, "").strip()
+                response = response.replace(query,"").strip()
                 response = response.replace(context, "").strip()
                 tokens = tokenizer(response, return_tensors="pt").input_ids.shape[1]
                 print(f"Number of tokens in response: {tokens}")
@@ -88,8 +85,7 @@ while True:
         else:
             continue
     else:
-        context=""
-        inputs = tokenizer(context,query, return_tensors="pt", padding=True, truncation=True, max_length=3800).to("cuda")
+        inputs = tokenizer(query, return_tensors="pt", padding=True, truncation=True, max_length=3800).to("cuda")
         print(estimate_confidence(inputs))
         output = model.generate(
             **inputs,
@@ -107,5 +103,4 @@ while True:
         tokens = tokenizer(response, return_tensors="pt").input_ids.shape[1]
         print(f"Number of tokens in response: {tokens}")
         print(f"Assistant: {response}")
-        context+=response
 

@@ -34,7 +34,6 @@ def check_url(url):
         r"(free|cheap|offer|win|bonus|prize|gift|reward|lottery|promo|hotdeal|discount|earnmoney|paynow|"
         r"fastcash|creditcard|bitcoin|forex|hack|unblock|download|crack|keygen|serial|giveaway|payperclick)\.",
     ]
-
     if any(re.search(pattern, url) for pattern in suspicious_patterns):
         return "unsafe (offline heuristic check)"
 
@@ -74,8 +73,6 @@ def fetch_webpage(url, timeout=10):
 
 def extract_text_from_html(html):
     soup = BeautifulSoup(html, "html.parser")
-
-    # Remove unnecessary elements
     for tag in soup(["script", "style", "iframe", "img", "video", "audio", "svg", "noscript", "aside", "footer"]):
         tag.decompose()
 
@@ -98,7 +95,7 @@ def extract_text_from_html(html):
     clean_text = "\n".join(content)
     return clean_text if clean_text else "No text content found."
 
-def get_clean_article_text(url):
+def getarticle_text(url):
     html = fetch_webpage(url)
     if html:
         return extract_text_from_html(html)
