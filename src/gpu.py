@@ -1,4 +1,3 @@
-# Description: This script checks the memory usage of the GPU.
 import torch
 
 def check_cuda_memory():
@@ -15,4 +14,6 @@ def check_cuda_memory():
     else:
         print("CUDA is not available. Running on CPU.")
 
-check_cuda_memory()
+def clear_cuda_memory():
+    torch.cuda.empty_cache()
+    print("CUDA memory is cleared.")

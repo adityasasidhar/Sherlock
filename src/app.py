@@ -1,10 +1,12 @@
 import torch
-from googlesearch import search
+from sympy.physics.quantum.density import entropy
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
-from src.playground import search_results
 from src.wbs import search_duckduckgo
 from wbs import is_url, check_url, get_clean_article_text
+from file import add, get, clear
+from gpu import clear_cuda_memory, check_cuda_memory
+
+check_cuda_memory()
 
 context = ""
 
@@ -38,17 +40,20 @@ tokenizer.pad_token = tokenizer.eos_token
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     quantization_config=bnb_config,
-    device_map="cuda")
+    device_map="cuda"
+)
 
 def estimate_confidence(question):
+    inputs = tokenizer(question, return_tensors="pt", padding=True, truncation=True).to(device)
     with torch.no_grad():
-        outputs = model(**question)
+        outputs = model(**inputs)  # Now 'inputs' is properly formatted
     logits = outputs.logits
     last_token_logits = logits[0, -1, :]
     probabilities = torch.nn.functional.softmax(last_token_logits, dim=-1)
     max_prob = torch.max(probabilities).item()
-    entropy = -torch.sum(probabilities * torch.log(probabilities)).item()
-    return {"max_probability": max_prob, "entropy": entropy}
+    entropy_value = -torch.sum(probabilities * torch.log(probabilities)).item()
+    return {"max_probability": max_prob, "entropy": entropy_value}
+
 
 
 print("model loaded")
@@ -66,7 +71,7 @@ while True:
             print(estimate_confidence(inputs))
             output = model.generate(
                 **inputs,
-                max_length=3300,
+                max_new_tokens=3300,
                 num_return_sequences=1,
                 do_sample=False,
                 temperature=0.8,
@@ -86,14 +91,16 @@ while True:
             continue
 
     else:
-        confidence = estimate_confidence(query)
-        if confidence["max_probability"]>0.5 and confidence["entropy"]<1.5:
+        confidence_data = estimate_confidence(query)
+        confidence = confidence_data["max_probability"]
+        entropy = confidence_data["entropy"]
+        if confidence > 0.5 and entropy < 1.5:
             inputs = tokenizer(context, query, return_tensors="pt",
                                padding=True, truncation=True,
                                max_length=3300).to("cuda")
             output = model.generate(
                 **inputs,
-                max_length=3300,
+                max_new_tokens=3300,
                 num_return_sequences=1,
                 do_sample=False,
                 temperature=0.9,
@@ -110,10 +117,13 @@ while True:
             context += response
             context = context[-3500:]
 
-        elif confidence["max_probability"]<0.5:
+        elif confidence < 0.1:
             search_results = search_duckduckgo(query)
             print(search_results)
             for url in search_results:
+                if check_url(url) == "safe":
+                    context = get_clean_article_text(url)
+                    context = context[:3500]
 
 
 
