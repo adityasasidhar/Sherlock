@@ -27,6 +27,10 @@ with open('../apikey.txt', 'r') as f:
 
 def check_url(url):
     print("Checking URL safety...")
+    with open('../apikey.txt', 'r') as f:
+        key = f.read()
+        f.close()
+
     API_KEY = key
     suspicious_patterns = [
         r"[a-zA-Z0-9-]+\.(xyz|top|click|info|biz|gq|cf|tk|ml|ga|men|work|trade|loan)$",
@@ -101,20 +105,58 @@ def getarticle_text(url):
         return extract_text_from_html(html)
     return "Failed to fetch article text."
 
+
 def search_duckduckgo(query, num_results=10):
     query = query.replace(" ", "+")
     url = f"https://html.duckduckgo.com/html/?q={query}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
+
+    # Blocked categories: Shopping & Social Media
+    blocked_domains = [
+        "amazon.", "flipkart.", "ebay.", "aliexpress.", "walmart.", "etsy.",  # Shopping sites
+        "facebook.", "twitter.", "instagram.", "linkedin.", "tiktok.", "reddit.", "pinterest."
+                                                                                  "buzzfeed.", "dailystar.", "mirror.",
+        "thethings.", "thelist.",
+
+        # Misinformation & fake news
+        "infowars.", "beforeitsnews.", "naturalnews.", "sputniknews.", "rt.",
+
+        # AI-generated & scraper sites
+         "zergnet.",
+
+        # Unsafe & malware sites
+        "softonic.", "cnet.com/downloads", "freedownloadmanager.", "getintopc.",
+
+        # Political propaganda & bias
+        "breitbart.", "thegatewaypundit.", "msnbc.", "huffpost.",
+
+        # Illegal & unethical content
+        "thepiratebay.", "1337x.", "silkroadxx.", "crackserialkey."
+    ]
+
+
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, "html.parser")
         results = []
-        for link in soup.find_all("a", class_="result__url"):
-            results.append("https://" + link.text.strip())
-            if len(results) >= num_results:
-                break
+
+        for result in soup.find_all("div", class_="result"):  # Each search result
+            if "result--ad" in result.get("class", []) or "result__sponsored" in result.get("class", []):
+                continue  # Skip sponsored results
+
+            link_tag = result.find("a", class_="result__url")
+            if link_tag:
+                url = "https://" + link_tag.text.strip()
+
+                # Block shopping & social media sites
+                if any(blocked in url for blocked in blocked_domains):
+                    continue  # Skip this result
+
+                results.append(url)
+                if len(results) >= num_results:
+                    break
 
         return results
     else:
