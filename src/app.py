@@ -1,6 +1,5 @@
 import torch
 import logging
-from sympy.physics.quantum.density import entropy
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from src.wbs import search_duckduckgo
 from wbs import is_url, check_url, get_clean_article_text
@@ -71,7 +70,8 @@ while True:
             logging.info("Context: %s", context)
             inputs = tokenizer(context, query, return_tensors="pt",
                                padding=True, truncation=True,
-                               max_length=3300).to("cuda")
+                               max_length=3300)
+            inputs = {key: value.to(device) for key, value in inputs.items()}
             print(estimate_confidence(inputs))
             output = model.generate(
                 **inputs,
@@ -80,7 +80,8 @@ while True:
                 do_sample=True,
                 temperature=0.8,
                 top_p=0.9,
-                eos_token_id=tokenizer.eos_token_id
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.eos_token_id
             )
             response = tokenizer.batch_decode(output, skip_special_tokens=True)
             response = response[0]
@@ -98,11 +99,12 @@ while True:
         logging.info("Context: %s", context)
         confidence_data = estimate_confidence(query)
         confidence = confidence_data["max_probability"]
-        entropy = confidence_data["entropy"]
-        if confidence > 0.5 and entropy < 1.5:
+        # entropy = confidence_data["entropy"]
+        if confidence > 0.2:
             inputs = tokenizer(context, query, return_tensors="pt",
                                padding=True, truncation=True,
-                               max_length=3300).to("cuda")
+                               max_length=3300)
+            inputs = {key: value.to(device) for key, value in inputs.items()}
             output = model.generate(
                 **inputs,
                 max_new_tokens=3300,
@@ -110,7 +112,8 @@ while True:
                 do_sample=True,
                 temperature=0.9,
                 top_p=0.9,
-                eos_token_id=tokenizer.eos_token_id
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.eos_token_id
             )
             response = tokenizer.batch_decode(output, skip_special_tokens=True)
             response = response[0]
@@ -132,7 +135,8 @@ while True:
                 logging.info("Context: %s", context)
                 inputs = tokenizer(context, query, return_tensors="pt",
                                    padding=True, truncation=True,
-                                   max_length=3300).to("cuda")
+                                   max_length=3300)
+                inputs = {key: value.to(device) for key, value in inputs.items()}
                 output = model.generate(
                     **inputs,
                     max_new_tokens=3300,
@@ -140,7 +144,8 @@ while True:
                     do_sample=True,
                     temperature=0.9,
                     top_p=0.9,
-                    eos_token_id=tokenizer.eos_token_id
+                    eos_token_id=tokenizer.eos_token_id,
+                    pad_token_id=tokenizer.eos_token_id
                 )
                 response = tokenizer.batch_decode(output, skip_special_tokens=True)
                 response = response[0]
@@ -153,10 +158,3 @@ while True:
                 context = context[-3500:]
             else:
                 continue
-
-
-
-
-
-
-

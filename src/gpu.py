@@ -17,3 +17,11 @@ def check_cuda_memory():
 def clear_cuda_memory():
     torch.cuda.empty_cache()
     print("CUDA memory is cleared.")
+
+def get_cuda_device():
+    if torch.cuda.is_available():
+        return torch.cuda.get_device_name(0)
+    else:
+        return "CPU"
+
+print(get_cuda_device())

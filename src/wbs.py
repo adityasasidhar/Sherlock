@@ -2,8 +2,10 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from newspaper import Article
+from readability import Document
 
 def get_clean_article_text(url):
+    print("get_clean_article_text function called")
     try:
         article = Article(url)
         article.download()
@@ -15,6 +17,7 @@ def get_clean_article_text(url):
 
 
 def is_url(text):
+    print("is_url function called")
     url_pattern = re.compile(
         r"^(https?|ftp)://[^\s/$.?#].\S*$", re.IGNORECASE
     )
@@ -22,16 +25,18 @@ def is_url(text):
 
 
 with open('../apikey.txt', 'r') as f:
+    print("Reading API key...")
     key = f.read()
+    f.close()
 
 
 def check_url(url):
-    print("Checking URL safety...")
+    print("check_url function called")
     with open('../apikey.txt', 'r') as f:
         key = f.read()
         f.close()
 
-    API_KEY = key
+    api_key = key
     suspicious_patterns = [
         r"[a-zA-Z0-9-]+\.(xyz|top|click|info|biz|gq|cf|tk|ml|ga|men|work|trade|loan)$",
         r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",
@@ -42,7 +47,7 @@ def check_url(url):
         return "unsafe (offline heuristic check)"
 
     # Step 2: Google Safe Browsing API check (More accurate but requires an API key)
-    api_url = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={API_KEY}"
+    api_url = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}"
     data = {
         "client": {"clientId": "your_app", "clientVersion": "1.0"},
         "threatInfo": {
@@ -64,6 +69,7 @@ def check_url(url):
     return "safe"
 
 def fetch_webpage(url, timeout=10):
+    print("fetch_webpage function called")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -76,6 +82,7 @@ def fetch_webpage(url, timeout=10):
         return None
 
 def extract_text_from_html(html):
+    print("extract_text_from_html function called")
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "iframe", "img", "video", "audio", "svg", "noscript", "aside", "footer"]):
         tag.decompose()
@@ -100,6 +107,7 @@ def extract_text_from_html(html):
     return clean_text if clean_text else "No text content found."
 
 def getarticle_text(url):
+    print("getarticle_text function called")
     html = fetch_webpage(url)
     if html:
         return extract_text_from_html(html)
@@ -107,35 +115,84 @@ def getarticle_text(url):
 
 
 def search_duckduckgo(query, num_results=10):
+    print("search_duckduckgo function called")
     query = query.replace(" ", "+")
     url = f"https://html.duckduckgo.com/html/?q={query}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
-    # Blocked categories: Shopping & Social Media
     blocked_domains = [
-        "amazon.", "flipkart.", "ebay.", "aliexpress.", "walmart.", "etsy.",  # Shopping sites
-        "facebook.", "twitter.", "instagram.", "linkedin.", "tiktok.", "reddit.", "pinterest."
-                                                                                  "buzzfeed.", "dailystar.", "mirror.",
-        "thethings.", "thelist.",
+        # Shopping & E-commerce
+        "amazon.", "flipkart.", "ebay.", "aliexpress.", "walmart.", "etsy.", "bestbuy.", "target.",
+        "rakuten.", "newegg.", "shein.", "wayfair.", "overstock.", "zalando.", "mercari.", "poshmark.",
+        "bigcommerce.", "shopify.", "groupon.", "kohls.", "macys.", "homedepot.", "lowes.", "costco.",
+        "samsclub.", "chewy.", "asos.", "boohoo.", "prettylittlething.", "zappos.", "modcloth.", "lulus.",
+        "urbanoutfitters.", "hollisterco.", "abercrombie.", "victoriassecret.", "nordstrom.", "sephora.",
+        "ulta.", "bhphotovideo.", "adorama.", "microcenter.", "gamestop.", "nike.", "adidas.", "puma.",
+        "reebok.", "underarmour.", "lulu.", "levi.", "timberland.", "clarks.", "crocs.", "drmartens.",
+        "fossil.", "swatch.", "ray-ban.", "oakley.", "warbyparker.", "wayfair.", "pier1.", "ashleyfurniture.",
+        "rooms-to-go.", "ikea.", "cb2.", "westelm.", "crateandbarrel.", "bedbathandbeyond.", "staples.",
+        "officedepot.", "paperchase.", "michaels.", "hobbylobby.", "joann.", "partycity.", "shutterfly.",
+        "vistaprint.", "snapfish.", "redbubble.", "society6.", "cafepress.", "teepublic.", "spreadshirt.",
+        "zazzle.", "moonpig.", "funkypigeon.", "bluenile.", "jamesallen.", "kay.", "zales.", "tiffany.",
+        "pandora.", "cartier.", "chanel.", "gucci.", "prada.", "louisvuitton.", "burberry.", "hermes.",
+        "versace.", "dior.", "armani.", "ralphlauren.", "balenciaga.", "montblanc.", "swarovski.", "tagheuer.",
 
-        # Misinformation & fake news
-        "infowars.", "beforeitsnews.", "naturalnews.", "sputniknews.", "rt.",
+        # Social Media & Entertainment
+        "facebook.", "twitter.", "instagram.", "linkedin.", "tiktok.", "reddit.", "pinterest.",
+        "snapchat.", "tumblr.", "discord.", "threads.", "onlyfans.", "quora.", "weibo.", "wechat.",
 
-        # AI-generated & scraper sites
-         "zergnet.",
+        # Clickbait, Misinformation & Fake News
+        "buzzfeed.", "dailystar.", "mirror.", "thethings.", "thelist.", "infowars.", "beforeitsnews.",
+        "naturalnews.", "sputniknews.", "rt.", "newsmax.", "theblaze.", "yournewswire.", "zerohedge.",
 
-        # Unsafe & malware sites
-        "softonic.", "cnet.com/downloads", "freedownloadmanager.", "getintopc.",
+        # AI-Generated & Scraper Sites
+        "zergnet.", "boredpanda.", "viralnova.", "clickhole.", "diply.", "ranker.", "upworthy.",
+        "patheos.", "yourtango.", "babylonbee.", "worldtruth.tv.",
 
-        # Political propaganda & bias
-        "breitbart.", "thegatewaypundit.", "msnbc.", "huffpost.",
+        # Unsafe & Malware-Ridden Download Sites
+        "softonic.", "cnet.com/downloads", "freedownloadmanager.", "getintopc.", "download.cnet.",
+        "filehippo.", "softpedia.", "crackstreams.", "freetrialdownloads.", "warez-bb.", "filehorse.",
+        "tucowsdownloads.", "oceanofgames.", "gameslopedy.", "igggames.",
 
-        # Illegal & unethical content
-        "thepiratebay.", "1337x.", "silkroadxx.", "crackserialkey."
+        # Political Propaganda & Biased News
+        "breitbart.", "thegatewaypundit.", "msnbc.", "huffpost.", "foxnews.", "oann.", "theintercept.",
+        "dailywire.", "motherjones.", "rawstory.", "newstarget.",
+
+        # Illegal & Unethical Content
+        "thepiratebay.", "1337x.", "silkroadxx.", "crackserialkey.", "rarbg.", "yts.", "limetorrents.",
+        "kickasstorrents.", "proxyrarbg.", "extratorrent.", "zippyshare.", "torrentz2.", "torrentdownloads.",
+        "nzbplanet.", "warez-bb.", "ddlvalley.", "katcr.co.",
+
+        # Gambling & Betting Sites
+        "bet365.", "pokerstars.", "fanduel.", "draftkings.", "bovada.", "888casino.", "stake.", "unibet.",
+        "williamhill.", "betfair.", "sportsbetting.", "ladbrokes.", "paddypower.", "dafabet.",
+
+        # Adult Content
+        "pornhub.", "xvideos.", "xnxx.", "redtube.", "youporn.", "brazzers.", "chaturbate.", "onlyfans.",
+        "camsoda.", "erome.", "hclips.", "hentaihaven.", "f95zone.",
+
+        # Cryptocurrency Scams & Ponzi Schemes
+        "bitconnect.", "onecoin.", "usitech.", "gainbitcoin.", "hyperfund.", "forsage.", "cashfxgroup.",
+        "mirrortradinginternational.", "trustinvesting.", "arbitraging.co.",
+
+        # VPN & Proxy Services (If Blocking Circumvention)
+        "hidemyass.", "protonvpn.", "nordvpn.", "expressvpn.", "surfshark.", "cyberghostvpn.", "privateinternetaccess.",
+        "windscribe.", "tunnelbear.", "vpnunlimited.", "hotspotshield.", "freedom-vpn.",
+
+        # Black Hat Hacking & Exploit Sites
+        "hackforums.", "nulled.", "cracked.to.", "exploit-db.", "0day.today.", "raidforums.", "breachforums.",
+        "dark0de.", "hackthissite.", "shadowforums.", "antichat.", "blackhatworld.", "crackingforum.",
+
+        # Phishing & Scammer Domains
+        "freegiftcards.", "winiphone.", "click4money.", "earnbitcoinfast.", "surveys-for-cash.", "claimprizes.",
+        "lotterywinner.", "getrichquick.", "win-free-iphone.", "instantmillionaire.", "bitcoindoubler.",
+
+        # Miscellaneous Unwanted Websites
+        "fiverr.", "upwork.", "freelancer.", "99designs.", "peopleperhour.", "toptal.", "guru.", "taskrabbit.",
+        "zeerk.", "workana.", "weworkremotely.", "truelancer.", "hubstafftalent.", "twago.", "flexjobs.",
     ]
-
 
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
