@@ -99,7 +99,6 @@ while True:
         logging.info("Context: %s", context)
         confidence_data = estimate_confidence(query)
         confidence = confidence_data["max_probability"]
-        # entropy = confidence_data["entropy"]
         if confidence > 0.2:
             inputs = tokenizer(context, query, return_tensors="pt",
                                padding=True, truncation=True,

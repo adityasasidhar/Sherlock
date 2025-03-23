@@ -98,9 +98,9 @@ def extract_text_from_html(html):
         text = elem.get_text(strip=True)
         if text:
             if elem.name in ["h1", "h2", "h3"]:
-                content.append(f"\n{text}\n")  # Keep headers structured
+                content.append(f"\n{text}\n")
             elif elem.name == "li":
-                content.append(f"• {text}")  # Format list items
+                content.append(f"• {text}")
             else:
                 content.append(text)
     clean_text = "\n".join(content)
@@ -219,3 +219,7 @@ def search_duckduckgo(query, num_results=10):
     else:
         print(f"Failed to fetch search results: {response.status_code}")
         return []
+
+
+def all(query):
+    if query
